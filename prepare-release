@@ -140,9 +140,6 @@ main() {
     [[ "$new_version_written_ok" = "0" ]] || {
         error_exit "Failed to write $new_version to version.txt."
     }
-    cp "$VERSION_FILE" "$RELEASE_DIR" || {
-        error_exit "Failed to copy version.txt to release."
-    }
 
     ################################################################################################
     # Commit changes to version.txt, tag, and push
