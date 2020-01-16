@@ -125,7 +125,7 @@ main() {
     }
 
     ################################################################################################
-    # Write new version to version.txt and copy to release
+    # Write new version to version.txt
     #
     echo "Updating version.txt..."
     echo "$new_version" >"$VERSION_FILE"
