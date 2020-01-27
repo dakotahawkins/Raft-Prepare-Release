@@ -1,5 +1,9 @@
 # prepare-release
 
-A helper script for my Raft mods to handle preparing new releases. Should be used as a submodule in mod repos.
+A utility to handle preparing new releases of mods for the game [Raft](https://raft-game.com/).
 
-Uses [fsaintjacques/semver-tool](https://github.com/fsaintjacques/semver-tool) for semantic version bumps.
+## Example Usage
+
+```shell
+powershell PrepareRelease.ps1 -Name "Mod Name" -Type (Test|Major|Minor|Patch) [-NoExceptionTraces]
+```
