@@ -9,8 +9,13 @@ Import-Module "$PSScriptRoot\Get-RaftDir\RaftDir.psm1"
 [System.IO.DirectoryInfo] $ReleaseDir = $null
 [System.IO.FileInfo] $VersionFile = $null
 [System.IO.FileInfo] $ModSourceFile = $null
+[System.IO.FileInfo] $ModInfoFile = $null
+[System.IO.FileInfo] $ModBannerFile = $null
+[System.IO.FileInfo] $ModIconFile = $null
 [System.IO.FileInfo] $ReleaseModSourceFile = $null
 [System.IO.FileInfo] $ReleaseChangelog = $null
+[System.IO.FileInfo] $ReleaseModInfoFile = $null
+[System.IO.FileInfo] $ReleaseModZipFile = $null
 [System.IO.DirectoryInfo] $RaftModDir = $null
 
 Function Initialize-Paths {
@@ -146,6 +151,72 @@ Function Get-ModSourceFile {
     Return $script:ModSourceFile
 }
 
+Function Get-ModInfoFile {
+    [OutputType([System.IO.FileInfo])]
+    Param()
+
+    If ($null -ne $script:ModInfoFile) {
+        Return $script:ModInfoFile
+    }
+
+    Confirm-Initialized | Out-Null
+
+    [System.IO.FileInfo] $ModInfoFile = `
+        [System.IO.Path]::Combine( `
+            (Get-RepoDir), "ModResources", "modinfo.json" `
+        )
+    If (-Not $ModInfoFile.Exists) {
+        Throw [System.IO.FileNotFoundException] "Mod info file not found."
+    }
+
+    $script:ModInfoFile = $ModInfoFile
+    Return $script:ModInfoFile
+}
+
+Function Get-ModBannerFile {
+    [OutputType([System.IO.FileInfo])]
+    Param()
+
+    If ($null -ne $script:ModBannerFile) {
+        Return $script:ModBannerFile
+    }
+
+    Confirm-Initialized | Out-Null
+
+    [System.IO.FileInfo] $ModBannerFile = `
+        [System.IO.Path]::Combine( `
+            (Get-RepoDir), "ModResources", "banner.jpg" `
+        )
+    If (-Not $ModBannerFile.Exists) {
+        Throw [System.IO.FileNotFoundException] "Mod banner file not found."
+    }
+
+    $script:ModBannerFile = $ModBannerFile
+    Return $script:ModBannerFile
+}
+
+Function Get-ModIconFile {
+    [OutputType([System.IO.FileInfo])]
+    Param()
+
+    If ($null -ne $script:ModIconFile) {
+        Return $script:ModIconFile
+    }
+
+    Confirm-Initialized | Out-Null
+
+    [System.IO.FileInfo] $ModIconFile = `
+        [System.IO.Path]::Combine( `
+            (Get-RepoDir), "ModResources", "icon.png" `
+        )
+    If (-Not $ModIconFile.Exists) {
+        Throw [System.IO.FileNotFoundException] "Mod icon file not found."
+    }
+
+    $script:ModIconFile = $ModIconFile
+    Return $script:ModIconFile
+}
+
 Function Get-ReleaseModSourceFile {
     [OutputType([System.IO.FileInfo])]
     Param(
@@ -189,11 +260,61 @@ Function Get-ReleaseChangelog {
         Return $ReleaseChangelog
     }
     If (-Not $ReleaseChangelog.Exists) {
-        Throw [System.IO.FileNotFoundException] "Release mod source not found."
+        Throw [System.IO.FileNotFoundException] "Release changelog not found."
     }
 
     $script:ReleaseChangelog = $ReleaseChangelog
     Return $script:ReleaseChangelog
+}
+
+Function Get-ReleaseModInfoFile {
+    [OutputType([System.IO.FileInfo])]
+    Param(
+        [Switch] $Exists
+    )
+
+    If ($null -ne $script:ReleaseModInfoFile) {
+        Return $script:ReleaseModInfoFile
+    }
+
+    Confirm-Initialized | Out-Null
+
+    [System.IO.FileInfo] $ReleaseModInfoFile = `
+        [System.IO.Path]::Combine((Get-ReleaseDir), "modinfo.json")
+    If (-Not $Exists) {
+        Return $ReleaseModInfoFile
+    }
+    If (-Not $ReleaseModInfoFile.Exists) {
+        Throw [System.IO.FileNotFoundException] "Release mod info file not found."
+    }
+
+    $script:ReleaseModInfoFile = $ReleaseModInfoFile
+    Return $script:ReleaseModInfoFile
+}
+
+Function Get-ReleaseModZipFile {
+    [OutputType([System.IO.FileInfo])]
+    Param(
+        [Switch] $Exists
+    )
+
+    If ($null -ne $script:ReleaseModZipFile) {
+        Return $script:ReleaseModZipFile
+    }
+
+    Confirm-Initialized | Out-Null
+
+    [System.IO.FileInfo] $ReleaseModZipFile = `
+        [System.IO.Path]::Combine((Get-ReleaseDir),"$script:ModNameNoSpace.rmod")
+    If (-Not $Exists) {
+        Return $ReleaseModZipFile
+    }
+    If (-Not $ReleaseModZipFile.Exists) {
+        Throw [System.IO.FileNotFoundException] "Release mod zip file not found."
+    }
+
+    $script:ReleaseModZipFile = $ReleaseModZipFile
+    Return $script:ReleaseModZipFile
 }
 
 Function Get-RaftModDir {
@@ -225,6 +346,11 @@ Export-ModuleMember -Function Get-RepoDir
 Export-ModuleMember -Function Get-ReleaseDir
 Export-ModuleMember -Function Get-VersionFile
 Export-ModuleMember -Function Get-ModSourceFile
+Export-ModuleMember -Function Get-ModInfoFile
+Export-ModuleMember -Function Get-ModBannerFile
+Export-ModuleMember -Function Get-ModIconFile
 Export-ModuleMember -Function Get-ReleaseModSourceFile
 Export-ModuleMember -Function Get-ReleaseChangelog
+Export-ModuleMember -Function Get-ReleaseModInfoFile
+Export-ModuleMember -Function Get-ReleaseModZipFile
 Export-ModuleMember -Function Get-RaftModDir

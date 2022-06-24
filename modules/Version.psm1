@@ -7,7 +7,6 @@ Class ParsedVersion {
     [System.Version] $Version
 
     ParsedVersion([String] $VersionString) {
-        Confirm-ValidVersion | Out-Null
         If ($VersionString -match "^([vV]?)(\d+\.\d+\.\d+)$") {
             $this.Prepend = $Matches[1]
             $this.Version = $Matches[2]

@@ -2,7 +2,7 @@
 # Prepares a new test, major, minor, or patch release
 #
 # Usage:
-#  .\PrepareRelease.ps1 -Name "Mod Name" -Type (Test|Major|Minor|Patch) [-NoExceptionTraces]
+#  .\PrepareRelease.ps1 -Name "Mod Name" -Type (Test|Major|Minor|Patch) [-DebugRelease]
 
 Param(
     [Parameter(Position = 0, Mandatory = $True)]
@@ -24,25 +24,27 @@ Param(
     [ValidateSet("Test", "Major", "Minor", "Patch", IgnoreCase = $True)]
     [String] $Type,
 
-    [Switch] $NoExceptionTraces
-)
+    [Switch] $DebugRelease)
 
 Try {
     $ErrorActionPreference = "Stop"
     $OriginalModules = Get-Module
 
     Import-Module "$PSScriptRoot\modules\Paths.psm1"
-    (Initialize-Paths $PSScriptRoot $ModName)
+    Initialize-Paths $PSScriptRoot $ModName | Out-Null
 
     Import-Module "$PSScriptRoot\modules\Git.psm1"
     Import-Module "$PSScriptRoot\modules\Version.psm1"
 
     If ($Type -ine "Test") {
-        Confirm-NoUncommittedChanges | Out-Null
+        Confirm-NoUncommittedChanges -DebugRelease:$DebugRelease.IsPresent | Out-Null
     }
 
     [System.IO.FileInfo] $VersionFile = Get-VersionFile
     [System.IO.FileInfo] $ModSourceFile = Get-ModSourceFile
+    [System.IO.FileInfo] $ModInfoFile = Get-ModInfoFile
+    [System.IO.FileInfo] $ModBannerFile = Get-ModBannerFile
+    [System.IO.FileInfo] $ModIconFile = Get-ModIconFile
 
     ################################################################################################
     # Get current and new versions
@@ -63,20 +65,30 @@ Try {
     ################################################################################################
     # Clean release dir
     #
-    Clear-ReleaseDir | Out-Null
+    Clear-ReleaseDir -DebugRelease:$DebugRelease.IsPresent | Out-Null
     Write-Host "Cleaned release directory"
 
     ################################################################################################
-    # Copy mod source to release, update its version number, and copy the release to Raft's mods
+    # Copy mod files to release, update version number, zip, and copy the release to Raft's mods
     # folder
     #
     Copy-Item -Path $ModSourceFile -Destination (Get-ReleaseModSourceFile)
-    [System.IO.FileInfo] $ReleaseModSourceFile = Get-ReleaseModSourceFile -Exists
-    ((Get-Content -Path $ReleaseModSourceFile -Raw) -Replace "@VERSION@", $NewVersion) | `
-        Set-Content -Path $ReleaseModSourceFile -NoNewline
-    Write-Host "Added release mod source"
+    Copy-Item -Path $ModInfoFile -Destination (Get-ReleaseModInfoFile)
+    Copy-Item -Path $ModBannerFile -Destination (Get-ReleaseDir)
+    Copy-Item -Path $ModIconFile -Destination (Get-ReleaseDir)
 
-    Copy-Item -Path $ReleaseModSourceFile -Destination (Get-RaftModDir) -Force
+    [System.IO.FileInfo] $ReleaseModInfoFile = Get-ReleaseModInfoFile -Exists
+    ((Get-Content -Path $ReleaseModInfoFile -Raw) -Replace "@VERSION@", $NewVersion) | `
+        Set-Content -Path $ReleaseModInfoFile -NoNewline
+
+    Write-Host "Added release mod files"
+
+    [System.IO.FileInfo] $ReleaseModZipFile = Get-ReleaseModZipFile
+    Get-ChildItem -Path (Get-ReleaseDir) -Exclude ".gitignore" |
+        Compress-Archive -DestinationPath "$ReleaseModZipFile.zip"
+    Rename-Item -Path "$ReleaseModZipFile.zip" -NewName $ReleaseModZipFile
+
+    Copy-Item -Path $ReleaseModZipFile -Destination (Get-RaftModDir) -Force
     Write-Host "Installed mod"
 
     If ($Type -ieq "Test") {
@@ -88,11 +100,16 @@ Try {
     # Write and edit changelog in release dir
     #
     Set-Content `
-        -Path (Get-ReleaseChangelog) `
-        -Value `
-            @("# Release $NewVersion", [String]::Empty) + , `
-            (Get-Log -FromVersion $CurrentVersion)
-    & bash @('-c', (Get-Editor), (Get-ReleaseChangelog -Exists))
+        -Path (Get-ReleaseChangelog).FullName `
+        -Value ( `
+            @("# Release $NewVersion", [String]::Empty) + `
+            (Get-Log -FromVersion $CurrentVersion -DebugRelease:$DebugRelease.IsPresent) `
+        )
+    & bash @( `
+        '-c', `
+        "`'$(Get-Editor -DebugRelease:$DebugRelease.IsPresent)" + `
+            "$((Get-ReleaseChangelog -Exists).FullName.Replace("\", "/"))`'"
+    )
     If ($LastExitCode -ne 0) {
         Throw [System.InvalidOperationException] "Failed to edit changelog."
     }
@@ -101,27 +118,38 @@ Try {
     ################################################################################################
     # Write new version to version.txt
     #
-    Set-Content -Path $VersionFile -Value $NewVersion
+    if (-Not $DebugRelease) {
+        Set-Content -Path $VersionFile -Value $NewVersion
+    }
     Write-Host "Saved new version"
 
     ################################################################################################
     # Commit changes to version.txt, tag, and push
     #
-    Save-Release | Out-Null
+    Save-Release -DebugRelease:$DebugRelease.IsPresent | Out-Null
     Write-Host "Committed new version and tagged new release"
 
-    Publish-Release | Out-Null
+    Publish-Release -DebugRelease:$DebugRelease.IsPresent | Out-Null
     Write-Host "Pushed new release to remote"
 
     Write-Host "Done!"
 } Catch {
-    If (-Not $NoExceptionTraces) {
-        Throw
-    }
     Write-Host ("Error: {0}" -f $_.Exception.Message)
+    Write-Host
+    Write-Host "Stack Trace:"
+    Write-Host $_.ScriptStackTrace
+    Write-Host
+    Throw
 } Finally {
-    Compare-Object $OriginalModules (Get-Module) | `
-        Where-Object { $_.SideIndicator -eq '=>' } | `
-            Select-Object -ExpandProperty InputObject | `
-                ForEach-Object { Remove-Module $_ }
+    $NewModules = Get-Module
+    If ($null -ne $NewModules) {
+        If ($null -eq $OriginalModules) {
+            $NewModules | ForEach-Object { Remove-Module $_ }
+        } Else {
+            Compare-Object $OriginalModules $NewModules | `
+                Where-Object { $_.SideIndicator -eq '=>' } | `
+                    Select-Object -ExpandProperty InputObject | `
+                        ForEach-Object { Remove-Module $_ }
+        }
+    }
 }

@@ -5,21 +5,34 @@ Import-Module "$PSScriptRoot\Version.psm1"
 
 Function Confirm-NoUncommittedChanges {
     [OutputType([Bool])]
-    Param()
+    Param([Switch] $DebugRelease)
 
     [System.IO.DirectoryInfo] $RepoDir = Get-RepoDir
-
-    & git @('-C', $RepoDir, `
-        'diff', '--quiet', 'HEAD' `
-    ) 2> $null
-    If ($LastExitCode -ne 0) {
-        Throw [System.InvalidOperationException] "There are uncommitted staged or modified files."
+    [String] $IgnoreSubmodules = ""
+    If ($DebugRelease) {
+        $IgnoreSubmodules = "--ignore-submodules"
     }
     & git @('-C', $RepoDir, `
-        'ls-files', '--exclude-standard', '--others', '--error-unmatch' `
+        'diff', '--quiet', $IgnoreSubmodules, 'HEAD' `
+    ) 2>&1 | Out-Null
+    If ($LastExitCode -ne 0) {
+        [String] $Error = "There are uncommitted staged or modified files."
+        If ($DebugRelease) {
+            Write-Host "DEBUG: $Error"
+        } Else {
+            Throw [System.InvalidOperationException] $Error
+        }
+    }
+    & git @('-C', $RepoDir, `
+        'ls-files', '--exclude-standard', '--others', '--error-unmatch', '.' `
     ) 2>&1 | Out-Null
     If ($LastExitCode -eq 0) {
-        Throw [System.InvalidOperationException] "There are uncommitted untracked files."
+        [String] $Error = "There are uncommitted untracked files."
+        If ($DebugRelease) {
+            Write-Host "DEBUG: $Error"
+        } Else {
+            Throw [System.InvalidOperationException] $Error
+        }
     }
 
     Return $True
@@ -27,7 +40,7 @@ Function Confirm-NoUncommittedChanges {
 
 Function Clear-ReleaseDir {
     [OutputType([Bool])]
-    Param()
+    Param([Switch] $DebugRelease)
 
     [System.IO.DirectoryInfo] $RepoDir = Get-RepoDir
     [System.IO.DirectoryInfo] $ReleaseDir = (Get-ReleaseDir)
@@ -35,7 +48,12 @@ Function Clear-ReleaseDir {
         'clean', '-dfx', '--', $ReleaseDir `
     ) 2>&1 | Out-Null
     If ($LastExitCode -ne 0) {
-        Throw [System.InvalidOperationException] "Failed to clean release dir."
+        [String] $Error = "Failed to clean release dir."
+        If ($DebugRelease) {
+            Write-Host "DEBUG: $Error"
+        } Else {
+            Throw [System.InvalidOperationException] $Error
+        }
     }
 }
 
@@ -50,9 +68,11 @@ Function Get-VersionTagExists {
         [String] $VersionString
     )
 
+    [System.IO.DirectoryInfo] $RepoDir = Get-RepoDir
     & git @('-C', $RepoDir, `
-        'rev-parse', $VersionString `
+        'rev-parse', '--verify', '--quiet', '--end-of-options', $VersionString `
     ) 2>&1 | Out-Null
+
     Return $LastExitCode -eq 0
 }
 
@@ -64,7 +84,9 @@ Function Get-Log {
             Return Confirm-ValidVersion -VersionString $_
         })]
         [Parameter(Position = 0, Mandatory = $True)]
-        [String] $FromVersion
+        [String] $FromVersion,
+
+        [Switch] $DebugRelease
     )
 
     # If the $FromVersion tag doesn't exist, get the entire history
@@ -72,12 +94,19 @@ Function Get-Log {
         $FromVersion = "--root"
     }
 
+    [System.IO.DirectoryInfo] $RepoDir = Get-RepoDir
     [String[]] $Log = `
         & git @('-C', $RepoDir, `
-            'log', '--oneline', '--pretty=format:''* %s''', $FromVersion `
+            'log', '--oneline', '--pretty=format:"* %s"', "$FromVersion.." `
         ) 2> $null
     If ($LastExitCode -ne 0) {
-        Throw [System.InvalidOperationException] "Failed to get log."
+        [String] $Error = "Failed to get log."
+        If ($DebugRelease) {
+            Write-Host "DEBUG: $Error"
+            $Log = @("DEBUG LOG")
+        } Else {
+            Throw [System.InvalidOperationException] $Error
+        }
     }
 
     Return $Log
@@ -85,21 +114,33 @@ Function Get-Log {
 
 Function Get-Editor {
     [OutputType([String])]
-    Param()
+    Param([Switch] $DebugRelease)
 
+    [System.IO.DirectoryInfo] $RepoDir = Get-RepoDir
     [String] $Editor = $Env:GIT_EDITOR
+    [String] $Error = "Failed to get log."
     If ([String]::IsNullOrWhiteSpace($Editor)) {
         $Editor = `
             & git @('-C', $RepoDir, `
                 'var', 'GIT_EDITOR'
             ) 2> $null | Select-Object -First 1
         If ($LastExitCode -ne 0) {
-            Throw [System.InvalidOperationException] "Failed to get git editor."
+            If ($DebugRelease) {
+                Write-Host "DEBUG: $Error"
+                $Editor = "vim"
+            } Else {
+                Throw [System.InvalidOperationException] $Error
+            }
         }
     }
 
     If ([String]::IsNullOrWhiteSpace($Editor)) {
-        Throw [System.InvalidOperationException] "Failed to get git editor."
+        If ($DebugRelease) {
+            Write-Host "DEBUG: $Error"
+            $Editor = "vim"
+        } Else {
+            Throw [System.InvalidOperationException] $Error
+        }
     }
 
     Return $Editor
@@ -107,15 +148,25 @@ Function Get-Editor {
 
 Function Save-Release {
     [OutputType([Bool])]
-    Param()
+    Param([Switch] $DebugRelease)
 
+    [System.IO.DirectoryInfo] $RepoDir = Get-RepoDir
     [System.IO.FileInfo] $VersionFile = Get-VersionFile
+    [String] $DryRun = ""
+    If ($DebugRelease) {
+        $DryRun = " --dry-run"
+    }
 
     & git @('-C', $RepoDir, `
-        'add', $VersionFile `
+        "add$DryRun", '--', $VersionFile `
     ) 2>&1 | Out-Null
     If ($LastExitCode -ne 0) {
-        Throw [System.InvalidOperationException] "Failed to stage changes to version file."
+        [String] $Error = "Failed to stage changes to version file."
+        If ($DebugRelease) {
+            Write-Host "DEBUG: $Error"
+        } Else {
+            Throw [System.InvalidOperationException] $Error
+        }
     }
 
     [System.IO.FileInfo] $CommitMessageFile = `
@@ -127,26 +178,38 @@ Function Save-Release {
     }
     Set-Content -Path $CommitMessageFile -Value $CommitContents
     If (-Not $CommitMessageFile.Exists) {
-        Throw [System.InvalidOperationException] "Failed to write commit message file."
+        [String] $Error = "Failed to write commit message file."
+        If ($DebugRelease) {
+            Write-Host "DEBUG: $Error"
+        } Else {
+            Throw [System.InvalidOperationException] $Error
+        }
     }
 
     & git @('-C', $RepoDir, `
-        'commit', '-e', '-F', $CommitMessageFile `
-    ) 2> $null
+        "commit$DryRun", '-F', $CommitMessageFile `
+    ) 2>&1 | Out-Null
     If ($LastExitCode -ne 0) {
-        Throw [System.InvalidOperationException] "Failed to commit changes to version file."
+        [String] $Error = "Failed to commit changes to version file."
+        If ($DebugRelease) {
+            Write-Host "DEBUG: $Error"
+        } Else {
+            Throw [System.InvalidOperationException] $Error
+        }
     }
 
     Remove-Item -Path $CommitMessageFile
 
-    Confirm-NoUncommittedChanges | Out-Null
+    Confirm-NoUncommittedChanges -DebugRelease:$DebugRelease.IsPresent | Out-Null
 
-    [String] $VersionString = Get-VersionFromFile
-    & git @('-C', $RepoDir, `
-        'tag', '-m', "Release $VersionString", "$VersionString" `
-    ) 2>&1 | Out-Null
-    If ($LastExitCode -ne 0) {
-        Throw [System.InvalidOperationException] "Failed to tag new release."
+    If (-Not $DebugRelease) {
+        [String] $VersionString = Get-VersionFromFile
+        & git @('-C', $RepoDir, `
+            'tag', '-m', "Release $VersionString", "$VersionString" `
+        ) 2>&1 | Out-Null
+        If ($LastExitCode -ne 0) {
+            Throw [System.InvalidOperationException] "Failed to tag new release."
+        }
     }
 
     Return $True
@@ -154,13 +217,23 @@ Function Save-Release {
 
 Function Publish-Release {
     [OutputType([Bool])]
-    Param()
+    Param([Switch] $DebugRelease)
 
+    [System.IO.DirectoryInfo] $RepoDir = Get-RepoDir
+    [String] $DryRun = ""
+    If ($DebugRelease) {
+        $DryRun = " --dry-run"
+    }
     & git @('-C', $RepoDir, `
-        'push', '--follow-tags' `
+        "push$DryRun", '--follow-tags' `
     ) 2>&1 | Out-Null
     If ($LastExitCode -ne 0) {
-        Throw [System.InvalidOperationException] "Failed to push new release."
+        [String] $Error = "Failed to push new release."
+        If ($DebugRelease) {
+            Write-Host "DEBUG: $Error"
+        } Else {
+            Throw [System.InvalidOperationException] $Error
+        }
     }
 }
 
