@@ -39,6 +39,7 @@ Try {
     If ($Type -ine "Test") {
         Confirm-NoUncommittedChanges -DebugRelease:$DebugRelease.IsPresent | Out-Null
     }
+    Confirm-UpToDateWithRemote -DebugRelease:$DebugRelease.IsPresent | Out-Null
 
     [System.IO.FileInfo] $VersionFile = Get-VersionFile
     [System.IO.FileInfo] $ModSourceFile = Get-ModSourceFile
@@ -81,17 +82,17 @@ Try {
     ((Get-Content -Path $ReleaseModInfoFile -Raw) -Replace "@VERSION@", $NewVersion) | `
         Set-Content -Path $ReleaseModInfoFile -NoNewline
 
-    Write-Host "Added release mod files"
-
     [System.IO.FileInfo] $ReleaseModZipFile = Get-ReleaseModZipFile
     Get-ChildItem -Path (Get-ReleaseDir) -Exclude ".gitignore" |
         Compress-Archive -DestinationPath "$ReleaseModZipFile.zip"
     Rename-Item -Path "$ReleaseModZipFile.zip" -NewName $ReleaseModZipFile
 
-    Copy-Item -Path $ReleaseModZipFile -Destination (Get-RaftModDir) -Force
-    Write-Host "Installed mod"
+    Write-Host "Added release mod files"
 
     If ($Type -ieq "Test") {
+        Copy-Item -Path $ReleaseModZipFile -Destination (Get-RaftModDir) -Force
+        Write-Host "Installed mod"
+
         Write-Host "Done!"
         Exit 0
     }
@@ -129,6 +130,7 @@ Try {
     Save-Release -DebugRelease:$DebugRelease.IsPresent | Out-Null
     Write-Host "Committed new version and tagged new release"
 
+    Confirm-UpToDateWithRemote -DebugRelease:$DebugRelease.IsPresent | Out-Null
     Publish-Release -DebugRelease:$DebugRelease.IsPresent | Out-Null
     Write-Host "Pushed new release to remote"
 

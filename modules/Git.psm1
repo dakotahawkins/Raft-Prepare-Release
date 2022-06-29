@@ -38,6 +38,24 @@ Function Confirm-NoUncommittedChanges {
     Return $True
 }
 
+Function Confirm-UpToDateWithRemote {
+    [OutputType([Bool])]
+    Param([Switch] $DebugRelease)
+
+    [System.IO.DirectoryInfo] $RepoDir = Get-RepoDir
+    & git @('-C', $RepoDir, `
+        'push', '--dry-run', '--follow-tags' `
+    ) 2>&1 | Out-Null
+    If ($LastExitCode -ne 0) {
+        [String] $Error = "Push would fail. Make sure local is up-to-date with remote."
+        If ($DebugRelease) {
+            Write-Host "DEBUG: $Error"
+        } Else {
+            Throw [System.InvalidOperationException] $Error
+        }
+    }
+}
+
 Function Clear-ReleaseDir {
     [OutputType([Bool])]
     Param([Switch] $DebugRelease)
@@ -239,6 +257,7 @@ Function Publish-Release {
 
 Export-ModuleMember -Function Get-RepoDir
 Export-ModuleMember -Function Confirm-NoUncommittedChanges
+Export-ModuleMember -Function Confirm-UpToDateWithRemote
 Export-ModuleMember -Function Clear-ReleaseDir
 Export-ModuleMember -Function Get-VersionTagExists
 Export-ModuleMember -Function Get-Log
